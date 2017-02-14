@@ -827,6 +827,11 @@ namespace realsense_camera
   }
 
   /*
+   * Counter used to drop frames
+   */
+  int count = 0;
+    
+  /*
    * Publish topic.
    */
   void BaseNodelet::publishTopic(rs_stream stream_index, rs::frame &frame) try
@@ -837,22 +842,33 @@ namespace realsense_camera
     double frame_ts = frame.get_timestamp();
     if (ts_[stream_index] != frame_ts)  // Publish frames only if its not duplicate
     {
-      setImageData(stream_index, frame);
-      // Publish stream only if there is at least one subscriber.
-      if (camera_publisher_[stream_index].getNumSubscribers() > 0)
+      // Only publish every 3. frame
+      if (count >= 2)
       {
-        sensor_msgs::ImagePtr msg = cv_bridge::CvImage(std_msgs::Header(),
-                        encoding_[stream_index],
-                                image_[stream_index]).toImageMsg();
-        msg->header.frame_id = optical_frame_id_[stream_index];
-        // Publish timestamp to synchronize frames.
-        msg->header.stamp = ros::Time(camera_start_ts_) + ros::Duration(frame_ts * 0.001);
-        msg->width = image_[stream_index].cols;
-        msg->height = image_[stream_index].rows;
-        msg->is_bigendian = false;
-        msg->step = step_[stream_index];
-        camera_info_ptr_[stream_index]->header.stamp = msg->header.stamp;
-        camera_publisher_[stream_index].publish(msg, camera_info_ptr_[stream_index]);
+        setImageData(stream_index, frame);
+        // Publish stream only if there is at least one subscriber.
+        if (camera_publisher_[stream_index].getNumSubscribers() > 0)
+        {
+          sensor_msgs::ImagePtr msg = cv_bridge::CvImage(std_msgs::Header(),
+                          encoding_[stream_index],
+                                  image_[stream_index]).toImageMsg();
+          msg->header.frame_id = optical_frame_id_[stream_index];
+          // Publish timestamp to synchronize frames.
+          msg->header.stamp = ros::Time(camera_start_ts_) + ros::Duration(frame_ts * 0.001);
+          msg->width = image_[stream_index].cols;
+          msg->height = image_[stream_index].rows;
+          msg->is_bigendian = false;
+          msg->step = step_[stream_index];
+          camera_info_ptr_[stream_index]->header.stamp = msg->header.stamp;
+          camera_publisher_[stream_index].publish(msg, camera_info_ptr_[stream_index]);
+        }
+
+        // Reset counter
+        count = 0;
+      }
+      else
+      {
+          count++;
       }
     }
     ts_[stream_index] = frame_ts;
